@@ -1,28 +1,38 @@
-"use client"
+import { Database } from "@/supabase/types"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
+import HomePageComponent from "@/components/HomePage"
 
-import { ChatbotUISVG } from "@/components/icons/chatbotui-svg"
-import { IconArrowRight } from "@tabler/icons-react"
-import { useTheme } from "next-themes"
-import Link from "next/link"
-
-export default function HomePage() {
-  const { theme } = useTheme()
-
-  return (
-    <div className="flex size-full flex-col items-center justify-center">
-      <div>
-        <ChatbotUISVG theme={theme === "dark" ? "dark" : "light"} scale={0.3} />
-      </div>
-
-      <div className="mt-2 text-4xl font-bold">Chatbot UI</div>
-
-      <Link
-        className="mt-4 flex w-[200px] items-center justify-center rounded-md bg-blue-500 p-2 font-semibold"
-        href="/login"
-      >
-        Start Chatting
-        <IconArrowRight className="ml-1" size={20} />
-      </Link>
-    </div>
+export default async function HomePage() {
+  const cookieStore = cookies()
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        }
+      }
+    }
   )
+  const session = (await supabase.auth.getSession()).data.session
+
+  if (session) {
+    const { data: homeWorkspace, error } = await supabase
+      .from("workspaces")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .eq("is_home", true)
+      .single()
+
+    if (!homeWorkspace) {
+      throw new Error(error.message)
+    }
+
+    return redirect(`/${homeWorkspace.id}/chat`)
+  }
+
+  return <HomePageComponent />
 }
